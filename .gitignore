@@ -1,4 +1,5 @@
 .DS_Store
+.cache
 # Object files
 *.o
 *.ko
