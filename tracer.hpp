@@ -4,6 +4,7 @@
 #include <atomic>
 #include <ctime>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <thread>
 #include <unistd.h>
@@ -64,18 +65,16 @@ typedef enum
 
 typedef struct event_t
 {
-	std::string name;
-	std::string category;
+	const std::string name;
+	const std::string category;
 	void *id;
 	uint64_t ts;
 	uint32_t pid;
 	uint32_t tid;
 	char phase;
 	ArgType argType;
-	std::string argName;
-	std::string aStr;
-	int aInt;
-	double aDouble;
+	const std::string argName;
+	void *argValue;
 } Event;
 
 class TracerManager
@@ -83,7 +82,7 @@ class TracerManager
   public:
 	static TracerManager &getInstance()
 	{
-		std::call_once(onlyOne, []() { instance.reset(new TracerManager()); });
+		std::call_once(createInstance, []() { instance.reset(new TracerManager()); });
 		return *instance;
 	}
 
@@ -92,7 +91,6 @@ class TracerManager
 		trace = std::ofstream(jsonFile);
 		trace << "{\"traceEvents\":[" << std::endl;
 		isTracing = true;
-		emptyTrace = true;
 	}
 
 	inline void durationBegin(const std::string &category, const std::string &name, ArgType type = ArgType::NONE,
@@ -166,10 +164,9 @@ class TracerManager
 
 		for (const auto &raw : flushBuffer)
 		{
-			std::string traceBuffer;
-			traceBuffer += (emptyTrace ? "\n" : ",\n");
-			emptyTrace = false;
-			traceBuffer += "{\"cat\":\"" + raw.category + "\",";
+			std::string traceBuffer = ",\n{";
+			std::call_once(firstEntry, [&traceBuffer]() { traceBuffer.erase(0, 2); });
+			traceBuffer += "\"cat\":\"" + raw.category + "\",";
 			traceBuffer += "\"pid\":" + std::to_string(raw.pid) + ",";
 			traceBuffer += "\"tid\":" + std::to_string(raw.tid) + ",";
 			traceBuffer += "\"ts\":" + std::to_string(raw.ts - timeOffset) + ",";
@@ -180,19 +177,16 @@ class TracerManager
 			switch (raw.argType)
 			{
 			case INT:
-				traceBuffer += "{\"" + raw.argName + "\":" + std::to_string(raw.aInt) + "}";
+				traceBuffer += "{\"" + raw.argName + "\":" + std::to_string(( int64_t ) raw.argValue) + "}";
 				break;
 			case STRING:
-				traceBuffer += "{\"" + raw.argName + "\":\"" + raw.aStr + "\"}";
+				traceBuffer += "{\"" + raw.argName + "\":\"" + std::string((const char * ) raw.argValue) + "\"}";
 				break;
 			case NONE:
 			default:
 				traceBuffer += "{}";
 				break;
 			}
-
-			if (raw.phase == 'X')
-				traceBuffer += ",\"dur\":" + std::to_string(raw.aDouble);
 
 			if (raw.id)
 			{
@@ -218,14 +212,15 @@ class TracerManager
 	}
 
   private:
-	TracerManager() : eventsInProgress(0), isTracing(false), emptyTrace(true), timeOffset(getTime())
+	TracerManager() : eventsInProgress(0), isTracing(false), timeOffset(getTime())
 	{
 		eventBuffer.reserve(INTERNAL_TRACER_BUFFER_SIZE);
 		flushBuffer.reserve(INTERNAL_TRACER_BUFFER_SIZE);
 	}
 
 	static std::unique_ptr<TracerManager> instance;
-	static std::once_flag onlyOne;
+	static std::once_flag createInstance;
+	std::once_flag firstEntry;
 
 	std::vector<Event> eventBuffer;
 	std::vector<Event> flushBuffer;
@@ -233,7 +228,6 @@ class TracerManager
 	std::atomic<uint16_t> eventsInProgress;
 
 	bool isTracing;
-	bool emptyTrace;
 
 	std::ofstream trace;
 
@@ -245,9 +239,6 @@ class TracerManager
 
 	double getTime()
 	{
-		// struct timespec ts;
-		// clock_gettime(CLOCK_MONOTONIC, &ts);
-		// return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
 		return std::chrono::duration_cast<std::chrono::microseconds>(
 				   std::chrono::high_resolution_clock::now().time_since_epoch())
 			.count();
@@ -257,29 +248,8 @@ class TracerManager
 					  ArgType arg_type = NONE, const std::string &arg_name = "", void *arg_value = nullptr)
 	{
 		std::atomic_fetch_add(&eventsInProgress, 1);
-		Event ev;
-		ev.category = category;
-		ev.name = name;
-		ev.id = id;
-		ev.phase = ph;
-		ev.ts = getTime();
-		ev.tid = gettid();
-		ev.pid = getpid();
-		ev.argType = arg_type;
-		ev.argName = arg_name;
-
-		switch (arg_type)
-		{
-		case INT:
-			ev.aInt = (( uint64_t ) arg_value);
-			break;
-		case STRING:
-			ev.aStr = std::string(( const char * ) arg_value);
-			break;
-		case NONE:
-		default:
-			break;
-		}
+		Event ev{name,	   category, id,	   ( uint64_t ) getTime(), ( uint32_t ) getpid(), gettid(), ph,
+				 arg_type, arg_name, arg_value};
 
 		std::lock_guard<std::mutex> lock(eventMutex);
 		eventBuffer.push_back(ev);
@@ -297,12 +267,13 @@ class TracerManager
 };
 
 std::unique_ptr<TracerManager> TracerManager::instance;
-std::once_flag TracerManager::onlyOne;
+std::once_flag TracerManager::createInstance;
 
 class ScopedTrace
 {
   public:
-	ScopedTrace(const std::string &category, const std::string &name, ArgType type=ArgType::NONE, std::string key = "", void *value = nullptr)
+	ScopedTrace(const std::string &category, const std::string &name, ArgType type = ArgType::NONE,
+				std::string key = "", void *value = nullptr)
 		: category(category), name(name), type(type), key(key), value(value)
 	{
 		TRACER.durationBegin(category, name, type, key, value);
