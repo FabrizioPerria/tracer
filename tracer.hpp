@@ -58,9 +58,9 @@ template<typename T = void *> struct Event
 	const std::string name;
 	const std::string category;
 	void *id;
-	uint64_t ts;
+	int64_t ts;
 	uint32_t pid;
-	uint32_t tid;
+	unsigned long tid;
 	char phase;
 	const std::string argName;
 	std::variant<int, std::string, void *> argValue;
@@ -83,19 +83,17 @@ class TracerManager
 	}
 
 	template<typename T = void *>
-	inline void durationBegin(
-		const std::string &category, const std::string &name, const std::string &key = "", T value = nullptr
-	)
+	inline void durationBegin(const std::string &category, const std::string &name, const std::string &key = "",
+							  T value = nullptr)
 	{
-		processEvent<T>(category, name, 'B', 0, key, value);
+		processEvent<T>(category, name, 'B', nullptr, key, value);
 	}
 
 	template<typename T = void *>
-	inline void durationEnd(
-		const std::string &category, const std::string &name, const std::string &key = "", T value = nullptr
-	)
+	inline void durationEnd(const std::string &category, const std::string &name, const std::string &key = "",
+							T value = nullptr)
 	{
-		processEvent<T>(category, name, 'E', 0, key, value);
+		processEvent<T>(category, name, 'E', nullptr, key, value);
 	}
 
 	inline void instant(const std::string &category, const std::string &name)
@@ -103,15 +101,14 @@ class TracerManager
 		processEvent<void *>(category, name, 'i');
 	}
 
-	inline void counter(const std::string &category, const std::string &name, int64_t count)
+	inline void counter(const std::string &category, const std::string &name, int count)
 	{
-		processEvent<int>(category, name, 'C', 0, name, count);
+		processEvent<int>(category, name, 'C', nullptr, name, count);
 	}
 
 	template<typename T = void *>
-	inline void asyncBegin(
-		const std::string &category, const std::string &name, void *id, const std::string &key = "", T value = nullptr
-	)
+	inline void asyncBegin(const std::string &category, const std::string &name, void *id, const std::string &key = "",
+						   T value = nullptr)
 	{
 		processEvent<T>(category, name, 'S', id, key, value);
 	}
@@ -122,17 +119,15 @@ class TracerManager
 	}
 
 	template<typename T = void *>
-	inline void asyncEnd(
-		const std::string &category, const std::string &name, void *id, const std::string &key = "", T value = nullptr
-	)
+	inline void asyncEnd(const std::string &category, const std::string &name, void *id, const std::string &key = "",
+						 T value = nullptr)
 	{
 		processEvent<T>(category, name, 'F', id, key, value);
 	}
 
 	template<typename T = void *>
-	inline void flowStart(
-		const std::string &category, const std::string &name, void *id, const std::string &key = "", T value = nullptr
-	)
+	inline void flowStart(const std::string &category, const std::string &name, void *id, const std::string &key = "",
+						  T value = nullptr)
 	{
 		processEvent<T>(category, name, 's', id, key, value);
 	}
@@ -143,16 +138,15 @@ class TracerManager
 	}
 
 	template<typename T = void *>
-	inline void flowFinish(
-		const std::string &category, const std::string &name, void *id, const std::string &key = "", T value = nullptr
-	)
+	inline void flowFinish(const std::string &category, const std::string &name, void *id, const std::string &key = "",
+						   T value = nullptr)
 	{
 		processEvent<T>(category, name, 'f', id, key, value);
 	}
 
 	inline void metadata(const std::string &metadataName, const std::string &argValue)
 	{
-		processEvent<std::string>("", metadataName, 'M', 0, "name", argValue);
+		processEvent<std::string>("", metadataName, 'M', nullptr, "name", argValue);
 	}
 
 	void flush(void)
@@ -191,8 +185,7 @@ class TracerManager
 						traceBuffer += ",\"args\": {\"" + raw.argName + "\":\"" + argValue + "\"}";
 					}
 				},
-				raw.argValue
-			);
+				raw.argValue);
 
 			traceBuffer += "}";
 			trace << traceBuffer;
@@ -233,24 +226,21 @@ class TracerManager
 	std::mutex eventMutex;
 	std::condition_variable flushCV;
 
-	uint64_t timeOffset;
+	int64_t timeOffset;
 
-	uint64_t getTime()
+	int64_t getTime()
 	{
 		return std::chrono::duration_cast<std::chrono::microseconds>(
-				   std::chrono::high_resolution_clock::now().time_since_epoch()
-		)
+				   std::chrono::high_resolution_clock::now().time_since_epoch())
 			.count();
 	}
 
 	template<typename T = void *>
-	void processEvent(
-		const std::string &category, const std::string &name, char ph, void *id = 0, const std::string &arg_name = "",
-		T arg_value = nullptr
-	)
+	void processEvent(const std::string &category, const std::string &name, char ph, void *id = nullptr,
+					  const std::string &arg_name = "", T arg_value = nullptr)
 	{
 		std::atomic_fetch_add(&eventsInProgress, 1);
-		Event<std::variant<int, std::string>> ev{name,	   category, id,	   getTime(), (uint32_t)getpid(),
+		Event<std::variant<int, std::string>> ev{name,	   category, id,	   getTime(), ( uint32_t ) getpid(),
 												 gettid(), ph,		 arg_name, nullptr};
 
 		if constexpr (std::is_same_v<T, int> || std::is_same_v<T, std::string>)
@@ -267,7 +257,7 @@ class TracerManager
 		std::atomic_fetch_sub(&eventsInProgress, 1);
 	}
 
-	std::uint16_t gettid()
+	unsigned long gettid()
 	{
 		return std::hash<std::thread::id>()(std::this_thread::get_id());
 	}
@@ -292,19 +282,19 @@ template<typename T = void *> class ScopedTrace
 {
   public:
 	ScopedTrace(const std::string &category, const std::string &name, std::string key = "", T value = nullptr)
-		: category(category), name(name), key(key), value(value)
+		: _category(category), _name(name), _key(key), _value(value)
 	{
 		TRACER.durationBegin(category, name, key, value);
 	}
 
 	~ScopedTrace()
 	{
-		TRACER.durationEnd(category, name, key, value);
+		TRACER.durationEnd(_category, _name, _key, _value);
 	}
 
   private:
-	std::string category;
-	std::string name;
-	std::string key;
-	T value;
+	std::string _category;
+	std::string _name;
+	std::string _key;
+	T _value;
 };
