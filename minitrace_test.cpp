@@ -5,16 +5,28 @@
 
 void c()
 {
-	TRACER_SCOPE("c++", "c()");
+	TRACER_FLOW_START("c++", "c()", ( void * ) 0x1234);
 	usleep(10000);
+	TRACER_FLOW_STEP("c++", "c()", ( void * ) 0x1234, "step 1");
+	usleep(10000);
+	TRACER_FLOW_STEP("c++", "c()", ( void * ) 0x1234, "step 2");
+	usleep(10000);
+	TRACER_FLOW_STEP("c++", "c()", ( void * ) 0x1234, "step 3");
+	usleep(10000);
+	TRACER_FLOW_FINISH("c++", "c()", ( void * ) 0x1234);
 }
 
 void b()
 {
-	TRACER_SCOPE("c++", "b()");
+	TRACER_ASYNC_START("c++", "b()", ( void * ) 0x5678);
+	usleep(10000);
+	TRACER_ASYNC_STEP("c++", "b()", ( void * ) 0x5678, "step 1");
+	usleep(10000);
+	TRACER_ASYNC_STEP("c++", "b()", ( void * ) 0x5678, "step 2");
 	usleep(20000);
 	c();
 	usleep(10000);
+	TRACER_ASYNC_FINISH("c++", "b()", ( void * ) 0x5678);
 }
 
 void a()
@@ -36,8 +48,8 @@ int main()
 	int long_running_thing_1;
 	int long_running_thing_2;
 
-	TRACER_START("background", "long_running", &long_running_thing_1);
-	TRACER_START("background", "long_running", &long_running_thing_2);
+	TRACER_ASYNC_START("background", "long_running", &long_running_thing_1);
+	TRACER_ASYNC_START("background", "long_running", &long_running_thing_2);
 
 	TRACER_COUNTER("main", "greebles", 3);
 	TRACER_BEGIN("main", "outer");
@@ -50,7 +62,7 @@ int main()
 		usleep(10000);
 		TRACER_COUNTER("main", "greebles", 3 * i + 10);
 	}
-	TRACER_STEP("background", "long_running", &long_running_thing_1, "middle step");
+	TRACER_ASYNC_STEP("background", "long_running", &long_running_thing_1, "middle step");
 	usleep(80000);
 	TRACER_END("main", "outer");
 	TRACER_COUNTER("main", "greebles", 0);
@@ -61,8 +73,8 @@ int main()
 	usleep(50000);
 	TRACER_INSTANT("main", "the end");
 	usleep(10000);
-	TRACER_FINISH("background", "long_running", &long_running_thing_1);
-	TRACER_FINISH("background", "long_running", &long_running_thing_2);
+	TRACER_ASYNC_FINISH("background", "long_running", &long_running_thing_1);
+	TRACER_ASYNC_FINISH("background", "long_running", &long_running_thing_2);
 
 	return 0;
 }

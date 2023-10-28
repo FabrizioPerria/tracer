@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-
 #include "tracer.hpp"
 
 // Does some meaningless work.
@@ -27,10 +26,9 @@ void *worker_thread(void *param)
 	int x = 0;
 	for (int i = 0; i < 32; i++)
 	{
-		TRACER_SCOPE(__FILE__, "Worker");
-		/* TRACER_BEGIN_INT(__FILE__, "Worker", "ID", id); */
+		TRACER_BEGIN_INT(__FILE__, "Worker", "ID", id);
 		x += work((rand() & 0x7fff) * 1000);
-		/* TRACER_END(__FILE__, "Worker"); */
+		TRACER_END(__FILE__, "Worker");
 	}
 	return ( void * ) ( intptr_t ) x;
 }
