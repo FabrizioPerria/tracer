@@ -110,19 +110,19 @@ class TracerManager
 	inline void asyncBegin(const std::string &category, const std::string &name, void *id, const std::string &key = "",
 						   T value = nullptr)
 	{
-		processEvent<T>(category, name, 'S', id, key, value);
+		processEvent<T>(category, name, 'b', id, key, value);
 	}
 
 	inline void asyncStep(const std::string &category, const std::string &name, void *id, const std::string &step)
 	{
-		processEvent<std::string>(category, name, 'T', id, "step", step);
+		processEvent<std::string>(category, name, 'n', id, "step", step);
 	}
 
 	template<typename T = void *>
 	inline void asyncEnd(const std::string &category, const std::string &name, void *id, const std::string &key = "",
 						 T value = nullptr)
 	{
-		processEvent<T>(category, name, 'F', id, key, value);
+		processEvent<T>(category, name, 'e', id, key, value);
 	}
 
 	template<typename T = void *>
