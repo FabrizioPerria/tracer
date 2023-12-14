@@ -19,7 +19,7 @@
 
 #define TRACER_BEGIN_STR(c, n, k, v) TRACER.add (c, n, Phases::Duration_Begin, nullptr, k, v)
 #define TRACER_END_STR(c, n, k, v) TRACER.add (c, n, Phases::Duration_End, nullptr, k, v)
-#define TRACER_SCOPE_STR(c, n, k, v) ScopedTrace<std::string> ____scope (c, n, k, v)
+#define TRACER_SCOPE_STR(c, n, k, v) ScopedTrace ____scope (c, n, k, v)
 
 #define TRACER_ASYNC_START(c, n, id) TRACER.add (c, n, Phases::Async_Begin, id)
 #define TRACER_ASYNC_STEP(c, n, id, step) TRACER.add (c, n, Phases::Async_Step, id, "step", step)
