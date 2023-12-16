@@ -176,8 +176,8 @@ private:
     {
     }
 
-    static std::unique_ptr<TracerManager> instance;
-    static std::once_flag createInstance;
+    inline static std::unique_ptr<TracerManager> instance;
+    inline static std::once_flag createInstance;
     std::once_flag firstEntry;
 
     std::array<Event, INTERNAL_TRACER_BUFFER_SIZE> eventBuffer;
@@ -237,9 +237,6 @@ private:
         { Phases::Flow_Step, 't' },      { Phases::Flow_Finish, 'f' },  { Phases::Metadata, 'M' }
     };
 };
-
-std::unique_ptr<TracerManager> TracerManager::instance;
-std::once_flag TracerManager::createInstance;
 
 class ScopedTrace
 {
