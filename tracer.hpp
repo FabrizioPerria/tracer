@@ -9,7 +9,7 @@
 #include <thread>
 #include <unistd.h>
 
-#define INTERNAL_TRACER_BUFFER_SIZE 1000000
+#define INTERNAL_TRACER_BUFFER_SIZE 1048576 //2^20
 
 #define TRACER TracerManager::getInstance()
 
@@ -92,25 +92,37 @@ public:
 
     int write (int num) noexcept
     {
-        const int currentEnd = validEnd % bufferSize;
-        const int openStart = (currentEnd + 1) % bufferSize;
-        const int openEnd = (validStart > currentEnd) ? validStart.load() : bufferSize;
+        int currentEnd, openStart, openEnd, numToWrite;
 
-        const int numToWrite = std::min (num, openEnd - openStart);
+        do
+        {
+            currentEnd = validEnd.load (std::memory_order_relaxed) % bufferSize;
+            openStart = (currentEnd + 1) % bufferSize;
+            openEnd = (validStart.load (std::memory_order_acquire) > currentEnd) ? validStart.load() : bufferSize;
+            numToWrite = std::min (num, openEnd - openStart);
+        } while (! validEnd.compare_exchange_weak (currentEnd,
+                                                   (currentEnd + numToWrite) % bufferSize,
+                                                   std::memory_order_release,
+                                                   std::memory_order_relaxed));
 
-        validEnd = (validEnd + numToWrite) % bufferSize;
         return currentEnd;
     }
 
     int read (int num) noexcept
     {
-        const int currentStart = validStart % bufferSize;
-        const int currentEnd = validEnd % bufferSize;
+        int currentStart, currentEnd, numReady, numToRead;
 
-        const int numReady = (currentEnd - currentStart + bufferSize) % bufferSize;
-        const int numToRead = std::min (num, numReady);
+        do
+        {
+            currentStart = validStart.load (std::memory_order_relaxed) % bufferSize;
+            currentEnd = validEnd.load (std::memory_order_acquire) % bufferSize;
+            numReady = (currentEnd - currentStart + bufferSize) % bufferSize;
+            numToRead = std::min (num, numReady);
+        } while (! validStart.compare_exchange_weak (currentStart,
+                                                     (currentStart + numToRead) % bufferSize,
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed));
 
-        validStart = (validStart + numToRead) % bufferSize;
         return currentStart;
     }
 
